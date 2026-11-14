@@ -820,6 +820,8 @@
         "\u2665",
       ];
       const MAX_COUNT = 300;
+      const USE_PHOTOS = true; // false = photo gula bad diye tar jaygay text/heart boshbe (aro halka)
+      const LITE = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent); // phone detect
       // ==========================
 
       document.getElementById("small").textContent = SMALL_TEXT;
@@ -1225,7 +1227,7 @@
       const PHOTO_COUNT = 18; // how many round photos sit in the heart (photos repeat)
       const photoImgs = [],
         photoSprites = [];
-      PHOTOS.forEach((s, i) => {
+      (USE_PHOTOS ? PHOTOS : []).forEach((s, i) => {
         const img = new Image();
         img.onload = () => {
           photoImgs[i] = img;
@@ -1267,6 +1269,18 @@
           ),
         };
       }
+      let glowC = null;
+      function buildGlow() {
+        const sz = Math.ceil(S * 44);
+        glowC = document.createElement("canvas");
+        glowC.width = glowC.height = sz;
+        const g = glowC.getContext("2d"),
+          gr = g.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
+        gr.addColorStop(0, "rgba(255,45,85,.45)");
+        gr.addColorStop(1, "rgba(255,45,85,0)");
+        g.fillStyle = gr;
+        g.fillRect(0, 0, sz, sz);
+      }
       function buildSprites() {
         sprites = WORDS.map((w) =>
           LIGHTS.map((l) => {
@@ -1284,7 +1298,7 @@
         );
       }
       function resize() {
-        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        dpr = Math.min(window.devicePixelRatio || 1, LITE ? 1.5 : 2);
         W = innerWidth;
         H = innerHeight;
         cv.width = Math.round(W * dpr);
@@ -1293,7 +1307,8 @@
         S = Math.min(W / 40, (H * 0.6) / 30);
         cx = W / 2;
         cy = H * 0.4 - 2.5 * S;
-        n = Math.max(120, Math.min(MAX_COUNT, Math.round((W * H) / 2500)));
+        n = Math.max(120, Math.min(LITE ? 190 : MAX_COUNT, Math.round((W * H) / 2500)));
+        buildGlow();
         buildSprites();
         buildAllPhotos();
       }
@@ -1333,8 +1348,10 @@
           const want = ((j + 0.5) / PHOTO_COUNT) * cum[N];
           while (idx < N && cum[idx] < want) idx++;
           const q = P[j];
-          q.photo = true;
-          q.pi = j % PHOTOS.length;
+          if (USE_PHOTOS) {
+            q.photo = true;
+            q.pi = j % PHOTOS.length;
+          } else q.size = 24;
           q.tx = pts[idx].x * 0.97;
           q.ty = pts[idx].y * 0.97;
           q.tz = 0;
@@ -1451,12 +1468,11 @@
           cosA = Math.cos(a),
           sinA = Math.sin(a);
         const dG = Math.pow(0.85, k);
-        const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, S * 22 * beat);
-        gr.addColorStop(0, "rgba(255,45,85,.45)");
-        gr.addColorStop(1, "rgba(255,45,85,0)");
-        ctx.globalAlpha = 0.14;
-        ctx.fillStyle = gr;
-        ctx.fillRect(0, 0, W, H);
+        if (glowC) {
+          const gs = S * 44 * beat;
+          ctx.globalAlpha = 0.14;
+          ctx.drawImage(glowC, cx - gs / 2, cy - gs / 2, gs, gs);
+        }
         for (let i = 0; i < n; i++) {
           const p = P[i];
           if (gather) {
@@ -1494,16 +1510,19 @@
             r = (p.size * depth) / BASE,
             sp = sprites[p.wi][p.li];
           const ps = p.photo ? photoSprites[p.pi] : null;
+          if (p.photo && !ps) continue;
           if (ps) {
             const dm = p.size * 2.4 * depth,
               pulse = 0.5 + 0.5 * Math.sin(t / 300 + i);
             PH.push({ x: p.x, y: p.y, r: dm / 2, pi: p.pi });
-            ctx.globalAlpha = 0.2 + 0.35 * pulse; // soft pulsing ring
-            ctx.strokeStyle = "#ff2d55";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, dm / 2 + 3 + pulse * 4, 0, Math.PI * 2);
-            ctx.stroke();
+            if (!LITE) {
+              ctx.globalAlpha = 0.2 + 0.35 * pulse; // soft pulsing ring
+              ctx.strokeStyle = "#ff2d55";
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, dm / 2 + 3 + pulse * 4, 0, Math.PI * 2);
+              ctx.stroke();
+            }
             ctx.globalAlpha = Math.min(1, (0.8 + 0.2 * p.alpha) * depth);
             ctx.drawImage(ps, p.x - dm / 2, p.y - dm / 2, dm, dm);
             continue;
@@ -1525,6 +1544,9 @@
         requestAnimationFrame(frame);
       }
 
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) last = 0;
+      });
       function popBalloon(b) {
         if (b.dataset.gone) return;
         b.dataset.gone = 1;
@@ -1635,13 +1657,17 @@
           );
         })(),
       };
+      const BLOOM_URI = {
+        rose: encodeURIComponent(BLOOM.rose),
+        tagar: encodeURIComponent(BLOOM.tagar),
+      };
       function floatBloom() {
         const rose = Math.random() < 0.4,
           sz = rose ? 30 + Math.random() * 18 : 16 + Math.random() * 14,
           h = document.createElement("div"),
-          img = encodeURIComponent(rose ? BLOOM.rose : BLOOM.tagar);
+          img = rose ? BLOOM_URI.rose : BLOOM_URI.tagar;
         h.className = "fly";
-        h.style.cssText = `left:${sideX(sz)}px;top:100%;width:${sz}px;height:${sz}px;background:url("data:image/svg+xml,${img}") center/contain no-repeat;filter:drop-shadow(0 0 5px rgba(255,255,255,.3))`;
+        h.style.cssText = `left:${sideX(sz)}px;top:100%;width:${sz}px;height:${sz}px;background:url("data:image/svg+xml,${img}") center/contain no-repeat`;
         document.body.appendChild(h);
         const sw = (Math.random() - 0.5) * 90,
           rot = (Math.random() - 0.5) * 360;
@@ -1686,6 +1712,10 @@
         if (started) return;
         started = true;
         document.getElementById("scene").classList.add("gone");
+        setTimeout(() => {
+          document.getElementById("scene").style.display = "none"; // animation gula puro bondho
+          document.querySelectorAll(".star").forEach((e) => e.remove());
+        }, 1300);
         glow.style.display = "none";
         cv.classList.add("on");
         document.getElementById("cap").classList.add("on");
@@ -1703,9 +1733,9 @@
           a.play().catch(fb);
         } else playTune();
         for (let k = 0; k < 7; k++) setTimeout(firework, 300 + k * 650);
-        setInterval(floatHeart, 200);
-        setInterval(floatBloom, 260);
-        for (let q = 0; q < 8; q++) setTimeout(floatBloom, q * 120);
+        setInterval(floatHeart, LITE ? 520 : 200);
+        setInterval(floatBloom, LITE ? 800 : 260);
+        for (let q = 0; q < (LITE ? 4 : 8); q++) setTimeout(floatBloom, q * 120);
         const m = document.getElementById("msg");
         let ti = 0;
         setTimeout(function type() {
@@ -1713,7 +1743,7 @@
           if (ti < MESSAGE.length) setTimeout(type, 45);
         }, 1800);
         const cols = ["#ff2d55", "#ff8fab", "#ffd166", "#fff3e6", "#ff5c8a"];
-        for (let i = 0; i < 70; i++) {
+        for (let i = 0; i < (LITE ? 36 : 70); i++) {
           const s = document.createElement("div");
           s.className = "fly";
           const heart = i % 2 === 0;
